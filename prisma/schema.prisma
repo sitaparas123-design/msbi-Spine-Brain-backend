@@ -33,7 +33,7 @@ model User {
 
 model Role {
   name        String   @id // The name of the role (e.g., 'Admin')
-  permissions Json     @default("{}") // JSON string/object of boolean flags per nav ID
+  permissions Json     // JSON string/object of boolean flags per nav ID
   isSystem    Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
