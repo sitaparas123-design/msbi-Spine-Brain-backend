@@ -23,7 +23,8 @@ async function simulateWordPressWebhook() {
   };
 
   try {
-    const response = await axios.post('http://localhost:8000/api/v1/webhooks/wordpress/forms', payload, {
+    const apiUrl = process.env.API_URL || 'https://msbi-spine-brain-backend-production.up.railway.app';
+    const response = await axios.post(`${apiUrl}/api/v1/webhooks/wordpress/forms`, payload, {
       headers: {
         'Content-Type': 'application/json',
         'x-webhook-secret': secret

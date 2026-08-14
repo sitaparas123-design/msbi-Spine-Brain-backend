@@ -25,7 +25,7 @@ export default async function googleOAuthRoutes(fastify: FastifyInstance) {
 
     if (error) {
       fastify.log.error(`Google OAuth error: ${error}`);
-      return reply.redirect('/integrations?error=oauth_denied');
+      return reply.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/integrations?error=oauth_denied`);
     }
 
     if (!code || !state) {
@@ -59,13 +59,13 @@ export default async function googleOAuthRoutes(fastify: FastifyInstance) {
         await integrationsService.saveCredentials('gsc', tokens.access_token, tokens.refresh_token || null, undefined);
         
         // At this point, we just saved the tokens. The frontend should now fetch properties.
-        return reply.redirect('/integrations?subview=ga4&connected=true');
+        return reply.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/integrations?subview=ga4&connected=true`);
       } else {
         return reply.status(400).send({ error: 'No access token returned from Google' });
       }
     } catch (err: any) {
       fastify.log.error(`Google OAuth token exchange failed: ${err.message}`);
-      return reply.redirect('/integrations?error=token_exchange_failed');
+      return reply.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/integrations?error=token_exchange_failed`);
     }
   });
 }
