@@ -24,10 +24,12 @@ export const wordpressFormWebhookSchema = z.object({
   fbclid: z.string().optional(),
   metadata: z.object({
     hadMRI: z.enum(['Yes', 'No']).nullable().optional(),
-    preferredContactMethod: z.union([
-      z.array(z.enum(['Phone', 'Email'])),
-      z.enum(['Phone', 'Email'])
-    ]).optional(),
+    preferredContactMethod: z.preprocess((val) => {
+      if (typeof val === 'string') {
+        return val.split(',').map(s => s.trim()).filter(Boolean);
+      }
+      return val;
+    }, z.array(z.enum(['Phone', 'Email']))).optional(),
     howDidYouHearAboutUs: z.string().max(1000).optional(),
   }).strict().optional(),
   submittedAt: z.string().optional()
