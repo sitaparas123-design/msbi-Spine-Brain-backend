@@ -18,6 +18,8 @@ export const getWebsiteAnalyticsHandler = async (
   return reply.send({ success: true, data });
 };
 
+
+
 export const getLeadsAnalyticsHandler = async (
   request: FastifyRequest<{ Querystring: AnalyticsQuery }>,
   reply: FastifyReply
