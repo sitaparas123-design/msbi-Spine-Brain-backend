@@ -72,7 +72,6 @@ export const wordpressFormHandler = async (
 
   // 6. Lead linking / creation
   let lead = null;
-  let formSubmissionDbId = crypto.randomUUID();
   
   // Find lead by email (or phone in future)
   if (normalizedEmail) {
@@ -97,18 +96,14 @@ export const wordpressFormHandler = async (
         source: formName || 'Website Contact Form',
         status: 'New',
         leadPlatform: 'wordpress',
-        externalLeadId: externalSubmissionId,
-        originalSubmissionId: formSubmissionDbId
+        externalLeadId: externalSubmissionId
       }
     });
-  } else {
-    formSubmissionDbId = crypto.randomUUID();
   }
 
   // 7. Create FormSubmission
   const submission = await prisma.formSubmission.create({
     data: {
-      id: formSubmissionDbId,
       externalSubmissionId,
       leadId: lead.id,
       formId,
