@@ -386,6 +386,7 @@ model Lead {
   // External sync fields
   externalLeadId String?
   leadPlatform   String?
+  originalSubmissionId String? @unique
 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

@@ -166,27 +166,90 @@ export class AnalyticsService {
   async getAttribution(query: AnalyticsQuery) {
     const { startDate, endDate } = parseDates(query);
     
-    const submissions = await prisma.formSubmission.findMany({
-      where: { createdAt: { gte: startDate, lte: endDate } }
+    const leads = await prisma.lead.findMany({
+      where: {
+        createdAt: { gte: startDate, lte: endDate }
+      },
+      include: {
+        formSubmissions: {
+          orderBy: { createdAt: 'asc' }
+        }
+      }
     });
     
-    const attributionMap: Record<string, number> = {};
+    const attributionMap: Record<string, { firstTouchCount: number; lastTouchCount: number; linearCount: number }> = {};
     
-    for (const sub of submissions) {
-      const channel = normalizeSource({
-        gclid: sub.gclid,
-        fbclid: sub.fbclid,
-        utmSource: sub.utmSource,
-        utmMedium: sub.utmMedium,
-        sourceUrl: sub.sourceUrl
-      });
-      attributionMap[channel] = (attributionMap[channel] || 0) + 1;
+    const initEntry = (source: string) => {
+      if (!attributionMap[source]) {
+        attributionMap[source] = { firstTouchCount: 0, lastTouchCount: 0, linearCount: 0 };
+      }
+    };
+    
+    for (const lead of leads) {
+      const submissions = lead.formSubmissions;
+      if (submissions.length === 0) {
+        const source = lead.source || 'unknown';
+        const channel = source.toLowerCase().includes('google') ? 'google_ads' : source.toLowerCase().includes('meta') || source.toLowerCase().includes('facebook') ? 'meta_ads' : 'unknown';
+        initEntry(channel);
+        attributionMap[channel].firstTouchCount++;
+        attributionMap[channel].lastTouchCount++;
+        attributionMap[channel].linearCount++;
+      } else {
+        const firstSub = submissions[0];
+        const firstChannel = normalizeSource({
+          gclid: firstSub.gclid,
+          fbclid: firstSub.fbclid,
+          utmSource: firstSub.utmSource,
+          utmMedium: firstSub.utmMedium,
+          sourceUrl: firstSub.sourceUrl
+        });
+        initEntry(firstChannel);
+        attributionMap[firstChannel].firstTouchCount++;
+        
+        const lastSub = submissions[submissions.length - 1];
+        const lastChannel = normalizeSource({
+          gclid: lastSub.gclid,
+          fbclid: lastSub.fbclid,
+          utmSource: lastSub.utmSource,
+          utmMedium: lastSub.utmMedium,
+          sourceUrl: lastSub.sourceUrl
+        });
+        initEntry(lastChannel);
+        attributionMap[lastChannel].lastTouchCount++;
+        
+        const linearWeight = 1 / submissions.length;
+        for (const sub of submissions) {
+          const subChannel = normalizeSource({
+            gclid: sub.gclid,
+            fbclid: sub.fbclid,
+            utmSource: sub.utmSource,
+            utmMedium: sub.utmMedium,
+            sourceUrl: sub.sourceUrl
+          });
+          initEntry(subChannel);
+          attributionMap[subChannel].linearCount += linearWeight;
+        }
+      }
     }
     
-    return Object.entries(attributionMap).map(([source, count]) => ({
-      source,
-      count
-    })).sort((a, b) => b.count - a.count);
+    const displayNameMap: Record<string, string> = {
+      google_ads: 'Google Search Ads',
+      meta_ads: 'Meta Facebook Social',
+      email: 'Email Marketing',
+      organic_search: 'Organic Search',
+      referral: 'Referral',
+      unknown: 'Direct / Unattributed'
+    };
+    
+    const LEAD_VALUE = 150.00;
+    
+    return Object.entries(attributionMap).map(([sourceKey, data], index) => ({
+      id: `attr-${index}-${sourceKey}`,
+      source: displayNameMap[sourceKey] || sourceKey,
+      firstTouchCount: data.firstTouchCount,
+      lastTouchCount: data.lastTouchCount,
+      linearReturn: Math.round(data.linearCount * LEAD_VALUE)
+    })).sort((a, b) => b.linearReturn - a.linearReturn);
   }
 
   async getRoiAnalytics(query: AnalyticsQuery) {
@@ -277,10 +340,15 @@ export class AnalyticsService {
     const formSubmissions = await prisma.formSubmission.count({
       where: { createdAt: { gte: startDate, lte: endDate } }
     });
+
+    const hubspotCred = await prisma.integrationCredential.findUnique({
+      where: { platformName: 'hubspot' }
+    });
     
     return {
       totalLeads: leads,
       totalSubmissions: formSubmissions,
+      connected: !!hubspotCred?.isActive,
       calls: await prisma.callLog.count({
         where: { timestamp: { gte: startDate, lte: endDate } }
       })
