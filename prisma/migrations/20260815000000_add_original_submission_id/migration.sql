@@ -1,5 +1,5 @@
 -- AlterTable
-ALTER TABLE `Lead` ADD COLUMN `originalSubmissionId` VARCHAR(191) NULL;
+ALTER TABLE `lead` ADD COLUMN `originalSubmissionId` VARCHAR(191) NULL;
 
 -- CreateIndex
-CREATE UNIQUE INDEX `Lead_originalSubmissionId_key` ON `Lead`(`originalSubmissionId`);
+CREATE UNIQUE INDEX `lead_originalSubmissionId_key` ON `lead`(`originalSubmissionId`);

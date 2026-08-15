@@ -18,7 +18,7 @@ const start = async () => {
     // Idempotent migration to ensure originalSubmissionId column and index exist in production MySQL database
     try {
       await prisma.$executeRawUnsafe(`
-        ALTER TABLE \`Lead\` ADD COLUMN \`originalSubmissionId\` VARCHAR(191) NULL;
+        ALTER TABLE \`lead\` ADD COLUMN \`originalSubmissionId\` VARCHAR(191) NULL;
       `);
       logger.info('Migration SQL: originalSubmissionId column added successfully');
     } catch (e: any) {
@@ -31,7 +31,7 @@ const start = async () => {
 
     try {
       await prisma.$executeRawUnsafe(`
-        CREATE UNIQUE INDEX \`Lead_originalSubmissionId_key\` ON \`Lead\`(\`originalSubmissionId\`);
+        CREATE UNIQUE INDEX \`lead_originalSubmissionId_key\` ON \`lead\`(\`originalSubmissionId\`);
       `);
       logger.info('Migration SQL: originalSubmissionId unique index created successfully');
     } catch (e: any) {

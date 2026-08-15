@@ -49,36 +49,6 @@ export const buildApp = () => {
     return { status: 'ok', timestamp: new Date().toISOString() };
   });
 
-  app.get('/api/health-db-debug', async (request, reply) => {
-    try {
-      const prismaClient = (app as any).prisma || require('./plugins/db').default;
-      const tables = await prismaClient.$queryRawUnsafe(`SHOW TABLES;`);
-      
-      let leadTableColumns: any = null;
-      try {
-        leadTableColumns = await prismaClient.$queryRawUnsafe(`DESCRIBE \`Lead\`;`);
-      } catch (e: any) {
-        leadTableColumns = { error: e.message };
-      }
-
-      let leadLowercaseColumns: any = null;
-      try {
-        leadLowercaseColumns = await prismaClient.$queryRawUnsafe(`DESCRIBE \`lead\`;`);
-      } catch (e: any) {
-        leadLowercaseColumns = { error: e.message };
-      }
-
-      return reply.send({
-        success: true,
-        tables,
-        leadTableColumns,
-        leadLowercaseColumns
-      });
-    } catch (err: any) {
-      return reply.send({ success: false, error: err.message });
-    }
-  });
-
   // Register Domain Modules (Phase 1, 2, 3 & 4)
   app.register(authRoutes, { prefix: '/api/v1/auth' });
   app.register(dashboardRoutes, { prefix: '/api/v1/dashboard' });
