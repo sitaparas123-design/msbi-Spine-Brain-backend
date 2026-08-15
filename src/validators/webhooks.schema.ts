@@ -23,9 +23,13 @@ export const wordpressFormWebhookSchema = z.object({
   gclid: z.string().optional(),
   fbclid: z.string().optional(),
   metadata: z.object({
-    hadMRI: z.enum(['Yes', 'No']).nullable().optional(),
+    hadMRI: z.preprocess((val) => {
+      if (val === '') return null;
+      return val;
+    }, z.enum(['Yes', 'No']).nullable().optional()),
     preferredContactMethod: z.preprocess((val) => {
       if (typeof val === 'string') {
+        if (val === '' || val.startsWith('[')) return [];
         return val.split(',').map(s => s.trim()).filter(Boolean);
       }
       return val;
