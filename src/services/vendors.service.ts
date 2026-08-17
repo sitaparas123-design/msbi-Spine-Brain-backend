@@ -1,9 +1,20 @@
 import prisma from '../plugins/db';
-import { CreateVendorInput } from '../validators/vendors.schema';
+import { 
+  CreateVendorInput, 
+  CreateContactInput, 
+  CreateContractInput, 
+  CreateInvoiceInput 
+} from '../validators/vendors.schema';
 
 export class VendorsService {
   async getAllVendors() {
     return prisma.vendor.findMany({
+      include: {
+        contacts: true,
+        contracts: true,
+        invoices: true,
+        expenses: true,
+      },
       orderBy: { name: 'asc' }
     });
   }
@@ -15,6 +26,7 @@ export class VendorsService {
         contacts: true,
         contracts: true,
         invoices: true,
+        expenses: true,
       },
     });
   }
@@ -26,6 +38,12 @@ export class VendorsService {
         category: data.category,
         performanceScore: data.performanceScore,
       },
+      include: {
+        contacts: true,
+        contracts: true,
+        invoices: true,
+        expenses: true,
+      }
     });
   }
 
@@ -57,6 +75,48 @@ export class VendorsService {
     return prisma.invoice.findMany({
       where: { vendorId },
       orderBy: { dueDate: 'desc' }
+    });
+  }
+
+  async createContact(vendorId: string, data: CreateContactInput) {
+    return prisma.vendorContact.create({
+      data: {
+        vendorId,
+        name: data.name,
+        email: data.email,
+        phone: data.phone,
+      }
+    });
+  }
+
+  async createContract(vendorId: string, data: CreateContractInput) {
+    return prisma.contract.create({
+      data: {
+        vendorId,
+        value: data.value,
+        startDate: new Date(data.startDate),
+        renewalDate: new Date(data.renewalDate),
+        documentUrl: data.documentUrl,
+      }
+    });
+  }
+
+  async createInvoice(vendorId: string, data: CreateInvoiceInput) {
+    return prisma.invoice.create({
+      data: {
+        vendorId,
+        amount: data.amount,
+        status: data.status,
+        dueDate: new Date(data.dueDate),
+        documentUrl: data.documentUrl,
+      }
+    });
+  }
+
+  async updateInvoiceStatus(invoiceId: string, status: string) {
+    return prisma.invoice.update({
+      where: { id: invoiceId },
+      data: { status }
     });
   }
 }

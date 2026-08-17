@@ -6,9 +6,19 @@ import {
   createVendorHandler,
   getRenewalsHandler,
   getContractsHandler,
-  getInvoicesHandler
+  getInvoicesHandler,
+  createContactHandler,
+  createContractHandler,
+  createInvoiceHandler,
+  updateInvoiceStatusHandler
 } from '../controllers/vendors.controller';
-import { createVendorSchema } from '../validators/vendors.schema';
+import { 
+  createVendorSchema, 
+  createContactSchema, 
+  createContractSchema, 
+  createInvoiceSchema, 
+  updateInvoiceStatusSchema 
+} from '../validators/vendors.schema';
 import { z } from 'zod';
 
 export async function vendorRoutes(fastify: FastifyInstance) {
@@ -23,4 +33,10 @@ export async function vendorRoutes(fastify: FastifyInstance) {
 
   server.get('/:id/contracts', { schema: { params: z.object({ id: z.string().uuid() }) } }, getContractsHandler);
   server.get('/:id/invoices', { schema: { params: z.object({ id: z.string().uuid() }) } }, getInvoicesHandler);
+
+  // New endpoints for dynamic workflows
+  server.post('/:id/contacts', { schema: { params: z.object({ id: z.string().uuid() }), body: createContactSchema } }, createContactHandler);
+  server.post('/:id/contracts', { schema: { params: z.object({ id: z.string().uuid() }), body: createContractSchema } }, createContractHandler);
+  server.post('/:id/invoices', { schema: { params: z.object({ id: z.string().uuid() }), body: createInvoiceSchema } }, createInvoiceHandler);
+  server.put('/invoices/:id/status', { schema: { params: z.object({ id: z.string().uuid() }), body: updateInvoiceStatusSchema } }, updateInvoiceStatusHandler);
 }

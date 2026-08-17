@@ -4,9 +4,10 @@ import {
   getBudgetOverviewHandler, 
   createExpenseHandler,
   getPlannedVsActualHandler,
-  getVendorSpendingHandler
+  getVendorSpendingHandler,
+  adjustBudgetHandler
 } from '../controllers/budget.controller';
-import { createExpenseSchema } from '../validators/budget.schema';
+import { createExpenseSchema, adjustBudgetSchema } from '../validators/budget.schema';
 
 export async function budgetRoutes(fastify: FastifyInstance) {
   const server = fastify.withTypeProvider<ZodTypeProvider>();
@@ -23,5 +24,15 @@ export async function budgetRoutes(fastify: FastifyInstance) {
       },
     },
     createExpenseHandler
+  );
+
+  server.put(
+    '/adjust',
+    {
+      schema: {
+        body: adjustBudgetSchema,
+      },
+    },
+    adjustBudgetHandler
   );
 }

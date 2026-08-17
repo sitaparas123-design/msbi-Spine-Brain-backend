@@ -1,5 +1,5 @@
 import prisma from '../plugins/db';
-import { CreateExpenseInput } from '../validators/budget.schema';
+import { CreateExpenseInput, AdjustBudgetInput } from '../validators/budget.schema';
 
 export class BudgetService {
   async getBudgetOverview() {
@@ -75,6 +75,7 @@ export class BudgetService {
       const manualExpenses = budgetExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
       
       return {
+        id: b.id,
         year: b.year,
         month: b.month,
         planned: Number(b.totalPlanned),
@@ -121,6 +122,13 @@ export class BudgetService {
     });
 
     return expense;
+  }
+
+  async adjustBudget(data: AdjustBudgetInput) {
+    return prisma.budget.update({
+      where: { id: data.budgetId },
+      data: { totalPlanned: data.totalPlanned }
+    });
   }
 }
 
