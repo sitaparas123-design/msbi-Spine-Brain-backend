@@ -4,9 +4,10 @@ import {
   getReviewsHandler, 
   sendReviewRequestHandler,
   getClinicRatingsHandler,
-  getProviderRatingsHandler
+  getProviderRatingsHandler,
+  createReviewHandler
 } from '../controllers/reputation.controller';
-import { createReviewRequestSchema } from '../validators/reputation.schema';
+import { createReviewRequestSchema, createReviewSchema } from '../validators/reputation.schema';
 
 export async function reputationRoutes(fastify: FastifyInstance) {
   const server = fastify.withTypeProvider<ZodTypeProvider>();
@@ -23,5 +24,15 @@ export async function reputationRoutes(fastify: FastifyInstance) {
       },
     },
     sendReviewRequestHandler
+  );
+
+  server.post(
+    '/reviews',
+    {
+      schema: {
+        body: createReviewSchema,
+      },
+    },
+    createReviewHandler
   );
 }

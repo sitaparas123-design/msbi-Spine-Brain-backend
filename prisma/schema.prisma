@@ -270,6 +270,18 @@ model Review {
   externalReviewId String?
   createdAt  DateTime @default(now())
 
+  // Reviewer info
+  firstName  String?
+  lastName   String?
+  email      String?
+  phone      String?
+
+  // Survey answers
+  providerAnsweredQuestions Boolean?
+  providerExplainedClearly  Boolean?
+  staffHelpful              Boolean?
+  wouldRecommend            Boolean?
+
   clinic     Clinic?   @relation(fields: [clinicId], references: [id], onDelete: SetNull)
   provider   Provider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
 

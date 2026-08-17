@@ -1,10 +1,17 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
+import crypto from 'crypto';
 import { reputationService } from '../services/reputation.service';
-import { CreateReviewRequestInput } from '../validators/reputation.schema';
+import { CreateReviewRequestInput, CreateReviewInput } from '../validators/reputation.schema';
 
 export const getReviewsHandler = async (request: FastifyRequest, reply: FastifyReply) => {
   const reviews = await reputationService.getReviews();
-  return reply.send({ success: true, data: reviews });
+  const mapped = reviews.map(r => ({
+    ...r,
+    patientName: r.authorName || [r.firstName, r.lastName].filter(Boolean).join(' ') || 'Anonymous',
+    isVerified: true,
+    reply: null
+  }));
+  return reply.send({ success: true, data: mapped });
 };
 
 export const getClinicRatingsHandler = async (request: FastifyRequest, reply: FastifyReply) => {
@@ -35,4 +42,31 @@ export const sendReviewRequestHandler = async (
 ) => {
   const reviewRequest = await reputationService.sendReviewRequest(request.body);
   return reply.status(201).send({ success: true, data: reviewRequest });
+};
+
+export const createReviewHandler = async (
+  request: FastifyRequest<{ Body: CreateReviewInput }>,
+  reply: FastifyReply
+) => {
+  // 1. Webhook Security: timing-safe comparison
+  const secret = process.env.WORDPRESS_FORM_WEBHOOK_SECRET;
+  if (!secret) {
+    return reply.status(500).send({ success: false, error: 'Server misconfiguration: Webhook secret not set' });
+  }
+
+  const incomingSecret = request.headers['x-webhook-secret'];
+  if (!incomingSecret || typeof incomingSecret !== 'string') {
+    return reply.status(401).send({ success: false, error: 'Unauthorized: Missing webhook secret' });
+  }
+
+  const secretBuffer = Buffer.from(secret);
+  const incomingBuffer = Buffer.from(incomingSecret);
+
+  if (secretBuffer.length !== incomingBuffer.length || !crypto.timingSafeEqual(secretBuffer, incomingBuffer)) {
+    return reply.status(403).send({ success: false, error: 'Forbidden: Invalid webhook secret' });
+  }
+
+  // 2. Call service to create review and match lead
+  const review = await reputationService.createReview(request.body);
+  return reply.status(201).send({ success: true, data: review });
 };
