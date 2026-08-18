@@ -10,10 +10,7 @@ export class ReportsService {
   }
 
   async getExports() {
-    return [
-      { id: '1', name: 'Q1_Executive_Summary.pdf', status: 'COMPLETED', date: new Date() },
-      { id: '2', name: 'May_Marketing_KPI.xlsx', status: 'COMPLETED', date: new Date() },
-    ];
+    return [];
   }
 }
 
