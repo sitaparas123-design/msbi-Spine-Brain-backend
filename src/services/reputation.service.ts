@@ -4,6 +4,7 @@ import { CreateReviewRequestInput, CreateReviewInput } from '../validators/reput
 export class ReputationService {
   async getReviews() {
     return prisma.review.findMany({
+      where: { platform: 'Google' },
       include: {
         clinic: true,
         provider: true,
@@ -16,6 +17,7 @@ export class ReputationService {
     return prisma.clinic.findMany({
       include: {
         reviews: {
+          where: { platform: 'Google' },
           select: { rating: true }
         }
       }
@@ -26,6 +28,7 @@ export class ReputationService {
     return prisma.provider.findMany({
       include: {
         reviews: {
+          where: { platform: 'Google' },
           select: { rating: true }
         }
       }
@@ -85,25 +88,27 @@ export class ReputationService {
     const providerId = data.providerId && data.providerId.trim() !== '' ? data.providerId : null;
     const clinicId = data.clinicId && data.clinicId.trim() !== '' ? data.clinicId : null;
 
-    // 4. Create Review
-    return prisma.review.create({
+    // 4. Create FormSubmission instead of Review (CRM Lead / FormSubmission flow)
+    return prisma.formSubmission.create({
       data: {
-        platform: 'Website',
-        rating: rating,
-        comment: data.comment,
-        authorName: name,
-        date: new Date(),
-        clinicId,
-        providerId,
-        externalReviewId,
-        firstName: data.firstName,
-        lastName: data.lastName,
+        externalSubmissionId: externalReviewId,
+        leadId: lead.id,
+        formId: 'share_your_experience',
+        formName: 'Share Your Experience Form',
+        name,
         email,
         phone,
-        providerAnsweredQuestions: data.providerAnsweredQuestions,
-        providerExplainedClearly: data.providerExplainedClearly,
-        staffHelpful: data.staffHelpful,
-        wouldRecommend: data.wouldRecommend,
+        message: data.comment,
+        metadata: {
+          rating,
+          providerAnsweredQuestions: data.providerAnsweredQuestions,
+          providerExplainedClearly: data.providerExplainedClearly,
+          staffHelpful: data.staffHelpful,
+          wouldRecommend: data.wouldRecommend,
+          clinicId,
+          providerId
+        },
+        submittedAt: new Date()
       }
     });
   }
