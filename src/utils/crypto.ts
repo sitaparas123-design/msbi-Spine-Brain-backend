@@ -28,8 +28,8 @@ function getEncryptionKey(): Buffer {
  * @param text The plaintext string to encrypt.
  * @returns The formatted encrypted string, or null if input is falsy.
  */
-export function encryptCredential(text: string | null | undefined): string | null {
-  if (!text) return null;
+export function encryptCredential(text: any): string | null {
+  if (!text || typeof text !== 'string') return null;
 
   // If it already looks encrypted, skip encryption to allow safe migration
   if (text.startsWith(`${ENCRYPTION_VERSION}:`)) {
@@ -55,8 +55,8 @@ export function encryptCredential(text: string | null | undefined): string | nul
  * @param encryptedText The formatted encrypted string.
  * @returns The plaintext string, or the original string if it wasn't encrypted (for migration), or null.
  */
-export function decryptCredential(encryptedText: string | null | undefined): string | null {
-  if (!encryptedText) return null;
+export function decryptCredential(encryptedText: any): string | null {
+  if (!encryptedText || typeof encryptedText !== 'string') return null;
 
   // Check if it's in our known format, if not, assume it's plaintext (for legacy safe migration)
   if (!encryptedText.startsWith(`${ENCRYPTION_VERSION}:`)) {

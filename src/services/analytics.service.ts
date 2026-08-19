@@ -52,7 +52,10 @@ export class AnalyticsService {
       };
     };
 
-    const ga4Cred = credStatus('google_analytics');
+    const ga4Cred = {
+      ...credStatus('ga4'),
+      connected: credStatus('ga4').connected || credStatus('google_analytics').connected
+    };
     const gAdsCred = credStatus('google_ads');
     const mAdsCred = credStatus('meta');
     const mailchimpCred = credStatus('mailchimp');
@@ -292,8 +295,62 @@ export class AnalyticsService {
 
   // Preserve other specific endpoints as wrappers mapping to new normalized logic
   async getWebsiteAnalytics(query: AnalyticsQuery) {
-    const overview = await this.getOverview(query);
-    return overview.website;
+    const creds = await prisma.integrationCredential.findMany();
+    const credStatus = (platformName: string) => {
+      const c = creds.find(x => x.platformName === platformName);
+      return {
+        connected: !!c?.isActive,
+        lastSyncAt: c?.lastSyncAt || null,
+        lastSuccessfulSyncAt: c?.lastSuccessfulSyncAt || null
+      };
+    };
+
+    const ga4Cred = credStatus('ga4');
+    const connected = ga4Cred.connected || credStatus('google_analytics').connected;
+
+    if (!connected) {
+      return {
+        connected: false,
+        data: null
+      };
+    }
+
+    try {
+      const startDate = query.startDate || '30daysAgo';
+      const endDate = query.endDate || 'today';
+
+      // 1. Get GA4 Overview data
+      const ga4Data = await ga4Service.getOverview(startDate, endDate);
+
+      // 2. Get GA4 Landing Pages report
+      const landingPages = await ga4Service.getLandingPagesReport(startDate, endDate);
+
+      // 3. Return mapped structure matching frontend expectations exactly
+      return {
+        connected: true,
+        data: {
+          overview: {
+            sessions: ga4Data?.sessions || 0,
+            screenPageViews: ga4Data?.screenPageViews || 0,
+            activeUsers: ga4Data?.activeUsers || 0,
+            engagedSessions: ga4Data?.engagedSessions || 0
+          },
+          landingPages: landingPages || [],
+          searchConsole: [] // Leave empty or return GSC data if available
+        }
+      };
+    } catch (error) {
+      console.error('Failed to fetch website analytics:', error);
+      return {
+        connected: true,
+        error: 'Failed to fetch GA4 data',
+        data: {
+          overview: { sessions: 0, screenPageViews: 0, activeUsers: 0, engagedSessions: 0 },
+          landingPages: [],
+          searchConsole: []
+        }
+      };
+    }
   }
   
   async getCallsAnalytics(query: AnalyticsQuery) {

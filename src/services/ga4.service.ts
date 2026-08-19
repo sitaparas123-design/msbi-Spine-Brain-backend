@@ -1,28 +1,71 @@
 import { google } from 'googleapis';
 import { googleOAuthService } from './google.service';
 import { integrationsService } from './integrations.service';
+import { BetaAnalyticsDataClient } from '@google-analytics/data';
 
 export class GA4Service {
-  private async getClient() {
-    const creds = await integrationsService.getSecureCredentials('ga4');
-    if (!creds?.accessToken) {
-      throw new Error('GA4 not connected');
-    }
-    const { client, onTokens } = await googleOAuthService.getAuthenticatedClient(creds.accessToken, creds.refreshToken);
-    
-    onTokens(async (tokens) => {
-      // If we got new tokens, persist them
-      if (tokens.access_token) {
-        // Keep the old refresh token if a new one wasn't provided
-        const newRefreshToken = tokens.refresh_token || creds.refreshToken;
-        await integrationsService.saveCredentials('ga4', tokens.access_token, newRefreshToken, creds.config);
-      }
-    });
+  private async getAnalyticsDataClient() {
+    // Programmatically delete the GOOGLE_APPLICATION_CREDENTIALS environment variable inside
+    // our Node process to prevent the Google Auth library from overriding the custom authClient
+    // with local system credentials.
+    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
 
+    const oauth2Client = await this.getClient();
+    console.log('[GA4 SERVICE] Initializing BetaAnalyticsDataClient with OAuth2Client');
+    const client = new BetaAnalyticsDataClient({
+      authClient: oauth2Client as any
+    });
+    console.log('[GA4 SERVICE] BetaAnalyticsDataClient initialized successfully.');
     return client;
   }
 
+  private async getPropertyId() {
+    if (process.env.GOOGLE_GA4_PROPERTY_ID) {
+      return process.env.GOOGLE_GA4_PROPERTY_ID;
+    }
+    const creds = await integrationsService.getSecureCredentials('ga4');
+    const config = creds?.config as any;
+    return config?.propertyId || null;
+  }
+
+  private async getClient() {
+    console.log('[GA4 SERVICE] Loading credentials from secure store...');
+    const creds = await integrationsService.getSecureCredentials('ga4');
+    if (!creds?.accessToken) {
+      console.error('[GA4 SERVICE] Load failed: accessToken is missing. Authorization required.');
+      throw new Error('Google Analytics authorization required');
+    }
+    console.log('[GA4 SERVICE] Credentials loaded successfully. Refresh token present:', !!creds.refreshToken);
+    
+    try {
+      console.log('[GA4 SERVICE] Retrieving authenticated OAuth2Client...');
+      const { client, onTokens } = await googleOAuthService.getAuthenticatedClient(creds.accessToken, creds.refreshToken);
+      
+      onTokens(async (tokens) => {
+        if (tokens.access_token) {
+          console.log('[GA4 SERVICE] Tokens updated/refreshed automatically. Saving new credentials...');
+          const newRefreshToken = tokens.refresh_token || creds.refreshToken;
+          await integrationsService.saveCredentials('ga4', tokens.access_token, newRefreshToken, creds.config);
+          console.log('[GA4 SERVICE] Refreshed credentials saved.');
+        }
+      });
+
+      return client;
+    } catch (error) {
+      console.error('[GA4 SERVICE] Authenticated client retrieval failed:', error);
+      throw new Error('Google Analytics authorization required');
+    }
+  }
+
   async getProperties() {
+    const propertyId = await this.getPropertyId();
+    if (propertyId) {
+      return [{
+        name: `properties/${propertyId}`,
+        property: `properties/${propertyId}`,
+        displayName: `GA4 Property (${propertyId})`
+      }];
+    }
     const client = await this.getClient();
     const adminApi = google.analyticsadmin({ version: 'v1beta', auth: client });
     const response = await adminApi.accountSummaries.list();
@@ -31,17 +74,15 @@ export class GA4Service {
 
   async healthCheck() {
     try {
-      const creds = await integrationsService.getSecureCredentials('ga4');
-      if (!creds?.accessToken) return false;
-      
-      const config = creds.config as any;
-      if (!config?.propertyId) return false; // Configuration Required
+      const propertyId = await this.getPropertyId();
+      if (!propertyId) return false;
 
-      const client = await this.getClient();
-      const adminApi = google.analyticsadmin({ version: 'v1beta', auth: client });
-      
-      // Basic health check to see if we can access the selected property
-      await adminApi.properties.get({ name: `properties/${config.propertyId}` });
+      const analyticsDataClient = await this.getAnalyticsDataClient();
+      await analyticsDataClient.runReport({
+        property: `properties/${propertyId}`,
+        dateRanges: [{ startDate: 'today', endDate: 'today' }],
+        metrics: [{ name: 'activeUsers' }]
+      });
       return true;
     } catch (error) {
       console.error('GA4 Health Check Failed:', error);
@@ -56,33 +97,39 @@ export class GA4Service {
     const config = creds.config as any || {};
     config.propertyId = propertyId;
     
-    // We pass the existing access token and refresh token, but update the config
     await integrationsService.saveCredentials('ga4', creds.accessToken, creds.refreshToken || null, config);
   }
 
   async runReport(dimensions: string[], metrics: string[], startDate = '30daysAgo', endDate = 'today') {
-    const creds = await integrationsService.getSecureCredentials('ga4');
-    if (!creds?.accessToken) return null;
-    
-    const config = creds.config as any;
-    if (!config?.propertyId) return null;
-
-    const client = await this.getClient();
-    const dataApi = google.analyticsdata({ version: 'v1beta', auth: client });
+    const propertyId = await this.getPropertyId();
+    if (!propertyId) {
+      throw new Error('GOOGLE_GA4_PROPERTY_ID is not configured in .env and not found in database');
+    }
     
     try {
-      const response = await dataApi.properties.runReport({
-        property: `properties/${config.propertyId}`,
-        requestBody: {
-          dateRanges: [{ startDate, endDate }],
-          dimensions: dimensions.map(d => ({ name: d })),
-          metrics: metrics.map(m => ({ name: m }))
-        }
+      const analyticsDataClient = await this.getAnalyticsDataClient();
+      const [response] = await analyticsDataClient.runReport({
+        property: `properties/${propertyId}`,
+        dateRanges: [{ startDate, endDate }],
+        dimensions: dimensions.map(d => ({ name: d })),
+        metrics: metrics.map(m => ({ name: m }))
       });
-      return response.data;
-    } catch (error) {
-      console.error('GA4 runReport error:', error);
-      return null;
+      return response;
+    } catch (error: any) {
+      console.error('GA4 runReport OAuth error:', error.message || error);
+      const msg = error.message || '';
+      // Map cryptic token/key/auth errors to a clean, user-friendly message
+      if (
+        msg.includes('invalid_grant') ||
+        msg.includes('Getting credentials failed') ||
+        msg.includes('Getting metadata from plugin failed') ||
+        msg.includes('auth') ||
+        msg.includes('permission') ||
+        msg.includes('key must be')
+      ) {
+        throw new Error('Google Analytics authorization required');
+      }
+      throw error;
     }
   }
 
@@ -99,6 +146,25 @@ export class GA4Service {
       screenPageViews: parseInt(metrics?.[4]?.value || '0', 10),
       engagedSessions: parseInt(metrics?.[5]?.value || '0', 10),
     };
+  }
+
+  async getLandingPagesReport(startDate = '30daysAgo', endDate = 'today') {
+    const data = await this.runReport(['landingPage'], ['sessions', 'screenPageViews', 'bounceRate'], startDate, endDate);
+    if (!data || !data.rows) return [];
+
+    return data.rows.map((row: any) => {
+      const path = row.dimensionValues?.[0]?.value || '/';
+      const sessions = parseInt(row.metricValues?.[0]?.value || '0', 10);
+      const pageviews = parseInt(row.metricValues?.[1]?.value || '0', 10);
+      const bounceRate = parseFloat(row.metricValues?.[2]?.value || '0');
+
+      return {
+        path,
+        sessions,
+        pageviews,
+        bounceRate
+      };
+    });
   }
 }
 

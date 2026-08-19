@@ -115,7 +115,22 @@ export class IntegrationsService {
   /**
    * Internal method to safely save credentials
    */
-  async saveCredentials(platformName: string, accessToken: string | null, refreshToken?: string | null, apiKey?: string | null) {
+  async saveCredentials(platformName: string, accessToken: string | null, refreshToken?: string | null, apiKeyOrConfig?: string | any, config?: any) {
+    let apiKey: string | null = null;
+    let actualConfig: any = null;
+
+    if (apiKeyOrConfig) {
+      if (typeof apiKeyOrConfig === 'string') {
+        apiKey = apiKeyOrConfig;
+      } else {
+        actualConfig = apiKeyOrConfig;
+      }
+    }
+
+    if (config) {
+      actualConfig = config;
+    }
+
     const encryptedAccess = encryptCredential(accessToken);
     const encryptedRefresh = encryptCredential(refreshToken);
     const encryptedApi = encryptCredential(apiKey);
@@ -126,6 +141,7 @@ export class IntegrationsService {
         accessToken: encryptedAccess,
         refreshToken: encryptedRefresh,
         apiKey: encryptedApi,
+        config: actualConfig !== null ? actualConfig : undefined,
         isActive: true
       },
       create: {
@@ -133,6 +149,7 @@ export class IntegrationsService {
         accessToken: encryptedAccess,
         refreshToken: encryptedRefresh,
         apiKey: encryptedApi,
+        config: actualConfig !== null ? actualConfig : undefined,
         isActive: true
       }
     });

@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { googleOAuthService } from '../services/google.service';
 import { integrationsService } from '../services/integrations.service';
+import { ga4Service } from '../services/ga4.service';
 
 // Store state tokens in memory (in production, use Redis or DB with expiration)
 // Maps state -> { userId, timestamp }
@@ -21,51 +22,81 @@ export default async function googleOAuthRoutes(fastify: FastifyInstance) {
   });
 
   fastify.get('/google/oauth/callback', async (request: FastifyRequest, reply: FastifyReply) => {
-    const { code, state, error } = request.query as { code?: string; state?: string; error?: string };
+    const query = request.query as { code?: string; state?: string; error?: string };
+    console.log(`[OAUTH CALLBACK] Reached. Query params:`, {
+      hasCode: !!query.code,
+      hasState: !!query.state,
+      error: query.error
+    });
 
-    if (error) {
-      fastify.log.error(`Google OAuth error: ${error}`);
+    if (query.error) {
+      console.error(`[OAUTH CALLBACK] Google returned error: ${query.error}`);
       return reply.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/integrations?error=oauth_denied`);
     }
 
-    if (!code || !state) {
+    if (!query.code || !query.state) {
+      console.error(`[OAUTH CALLBACK] Missing authorization code or state token`);
       return reply.status(400).send({ error: 'Missing code or state' });
     }
 
     // Validate state
-    const stateData = stateStore.get(state);
+    console.log(`[OAUTH CALLBACK] Validating state token: ${query.state}`);
+    const stateData = stateStore.get(query.state);
     if (!stateData) {
+      console.error(`[OAUTH CALLBACK] Invalid or expired state token`);
       return reply.status(400).send({ error: 'Invalid or expired state token' });
     }
     
     // Optional: check expiration (e.g., 10 minutes)
     if (Date.now() - stateData.timestamp > 10 * 60 * 1000) {
-      stateStore.delete(state);
+      console.error(`[OAUTH CALLBACK] State token has expired`);
+      stateStore.delete(query.state);
       return reply.status(400).send({ error: 'State token expired' });
     }
     
-    stateStore.delete(state); // Single use
+    stateStore.delete(query.state); // Single use
+    console.log(`[OAUTH CALLBACK] State token validated successfully.`);
 
     try {
-      const tokens = await googleOAuthService.getTokens(code);
-      
-      // Save tokens for GA4 and GSC using the integrations service
-      // We'll map the Google tokens to both `ga4` and `gsc` platforms in our DB,
-      // or we could just save it under `google` and have both services use it.
-      // Let's save under `ga4` and `gsc` so they can be independently connected/configured.
+      console.log(`[OAUTH CALLBACK] Exchanging authorization code for tokens...`);
+      const tokens = await googleOAuthService.getTokens(query.code);
+      console.log(`[OAUTH CALLBACK] Token exchange successful. Refresh token present:`, !!tokens.refresh_token);
       
       if (tokens.access_token) {
+        console.log(`[OAUTH CALLBACK] Saving credentials for platforms "ga4" and "gsc"...`);
         await integrationsService.saveCredentials('ga4', tokens.access_token, tokens.refresh_token || null, undefined);
         await integrationsService.saveCredentials('gsc', tokens.access_token, tokens.refresh_token || null, undefined);
+        console.log(`[OAUTH CALLBACK] Credentials saved successfully.`);
         
-        // At this point, we just saved the tokens. The frontend should now fetch properties.
         return reply.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/integrations?subview=ga4&connected=true`);
       } else {
+        console.error(`[OAUTH CALLBACK] No access token returned from Google`);
         return reply.status(400).send({ error: 'No access token returned from Google' });
       }
     } catch (err: any) {
-      fastify.log.error(`Google OAuth token exchange failed: ${err.message}`);
+      console.error(`[OAUTH CALLBACK] Token exchange failed: ${err.message}`);
       return reply.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/integrations?error=token_exchange_failed`);
+    }
+  });
+
+  fastify.get('/google/analytics', async (request: FastifyRequest, reply: FastifyReply) => {
+    const { startDate, endDate } = request.query as { startDate?: string; endDate?: string };
+    try {
+      const overview = await ga4Service.getOverview(startDate || '30daysAgo', endDate || 'today');
+      const landingPages = await ga4Service.getLandingPagesReport(startDate || '30daysAgo', endDate || 'today');
+      return reply.send({
+        success: true,
+        data: {
+          overview,
+          landingPages
+        }
+      });
+    } catch (error: any) {
+      fastify.log.error(`GA4 report fetch failed: ${error.message || error}`);
+      return reply.status(500).send({
+        success: false,
+        error: error.message || 'Failed to fetch GA4 report'
+      });
     }
   });
 }
