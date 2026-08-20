@@ -27,6 +27,13 @@ model User {
   department   Department?   @relation(fields: [departmentId], references: [id])
   activityLogs ActivityLog[]
   campaigns    Campaign[]    // Campaigns owned by user
+
+  // Notification fields
+  phoneNumber  String?
+  emailAlerts  Boolean       @default(false)
+  smsAlerts    Boolean       @default(false)
+  alertLocations Json?
+
   @@map("user")
 }
 
@@ -85,6 +92,8 @@ model Clinic {
   phone     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  googleLocationId String?
 
   providers Provider[]
   reviews   Review[]
@@ -281,6 +290,15 @@ model Review {
   providerExplainedClearly  Boolean?
   staffHelpful              Boolean?
   wouldRecommend            Boolean?
+
+  // Reputation & Google Reviews fields
+  googleReviewId   String?
+  googleLocationId String?
+  reply            String?   @db.Text
+  repliedAt        DateTime?
+  reviewUrl        String?
+  responseTime     Float?
+  reviewUpdatedAt  DateTime?
 
   clinic     Clinic?   @relation(fields: [clinicId], references: [id], onDelete: SetNull)
   provider   Provider? @relation(fields: [providerId], references: [id], onDelete: SetNull)

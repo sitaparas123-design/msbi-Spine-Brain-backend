@@ -30,3 +30,23 @@ export const getActivityLogsHandler = async (request: FastifyRequest, reply: Fas
   const logs = await usersService.getActivityLogs();
   return reply.send({ success: true, data: logs });
 };
+
+export const updateNotificationPreferencesHandler = async (
+  request: FastifyRequest<{ Params: { id: string }; Body: { phoneNumber?: string | null; emailAlerts: boolean; smsAlerts: boolean; alertLocations?: string[] | null } }>,
+  reply: FastifyReply
+) => {
+  const { id } = request.params;
+  const { phoneNumber, emailAlerts, smsAlerts, alertLocations } = request.body;
+  try {
+    const user = await usersService.updateNotificationPreferences(id, {
+      phoneNumber,
+      emailAlerts,
+      smsAlerts,
+      alertLocations
+    });
+    const { passwordHash, ...safeUser } = user as any;
+    return reply.send({ success: true, data: safeUser });
+  } catch (err: any) {
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+};

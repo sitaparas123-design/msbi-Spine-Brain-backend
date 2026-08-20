@@ -21,7 +21,9 @@ import {
   getWordPressTagsHandler,
   getWordPressTypesHandler,
   getWordPressTaxonomiesHandler,
-  getWordPressConditionTreatmentsHandler
+  getWordPressConditionTreatmentsHandler,
+  getGoogleAdsConfigHandler,
+  setGoogleAdsConfigHandler
 } from '../controllers/integrations.controller';
 import { syncIntegrationSchema } from '../validators/integrations.schema';
 import { z } from 'zod';
@@ -42,6 +44,16 @@ export async function integrationsRoutes(fastify: FastifyInstance) {
   );
 
   server.post('/google-ads/sync', syncGoogleAdsHandler);
+  server.get('/google-ads/config', getGoogleAdsConfigHandler);
+  server.post('/google-ads/config', {
+    schema: {
+      body: z.object({
+        customerId: z.string().min(1),
+        loginCustomerId: z.string().optional().nullable()
+      })
+    }
+  }, setGoogleAdsConfigHandler);
+
   server.post('/meta-ads/sync', syncMetaAdsHandler);
   server.post('/google-business/sync', syncGbpHandler);
   server.post('/callrail/sync', syncCallrailHandler);

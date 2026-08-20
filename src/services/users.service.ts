@@ -14,6 +14,10 @@ export class UsersService {
         isActive: true,
         department: true,
         createdAt: true,
+        phoneNumber: true,
+        emailAlerts: true,
+        smsAlerts: true,
+        alertLocations: true,
       },
     });
   }
@@ -48,6 +52,18 @@ export class UsersService {
       include: { user: { select: { firstName: true, lastName: true, email: true } } },
       orderBy: { timestamp: 'desc' },
       take: 50
+    });
+  }
+
+  async updateNotificationPreferences(id: string, data: { phoneNumber?: string | null; emailAlerts: boolean; smsAlerts: boolean; alertLocations?: string[] | null }) {
+    return prisma.user.update({
+      where: { id },
+      data: {
+        phoneNumber: data.phoneNumber,
+        emailAlerts: data.emailAlerts,
+        smsAlerts: data.smsAlerts,
+        alertLocations: data.alertLocations || null
+      }
     });
   }
 }

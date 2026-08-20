@@ -2,6 +2,7 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import crypto from 'crypto';
 import { reputationService } from '../services/reputation.service';
 import { CreateReviewRequestInput, CreateReviewInput } from '../validators/reputation.schema';
+import { googleBusinessService } from '../services/google-business.service';
 
 export const getReviewsHandler = async (request: FastifyRequest, reply: FastifyReply) => {
   const reviews = await reputationService.getReviews();
@@ -9,7 +10,7 @@ export const getReviewsHandler = async (request: FastifyRequest, reply: FastifyR
     ...r,
     patientName: r.authorName || [r.firstName, r.lastName].filter(Boolean).join(' ') || 'Anonymous',
     isVerified: true,
-    reply: null
+    reply: r.reply || null
   }));
   return reply.send({ success: true, data: mapped });
 };
@@ -69,4 +70,77 @@ export const createReviewHandler = async (
   // 2. Call service to create review and match lead
   const review = await reputationService.createReview(request.body);
   return reply.status(201).send({ success: true, data: review });
+};
+
+export const getGbpAccountsHandler = async (request: FastifyRequest, reply: FastifyReply) => {
+  try {
+    const accounts = await googleBusinessService.getAccessibleAccounts();
+    return reply.send({ success: true, data: accounts });
+  } catch (err: any) {
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+};
+
+export const getGbpLocationsHandler = async (
+  request: FastifyRequest<{ Querystring: { accountId: string } }>,
+  reply: FastifyReply
+) => {
+  try {
+    const { accountId } = request.query;
+    if (!accountId) {
+      return reply.status(400).send({ success: false, error: 'Missing accountId query parameter' });
+    }
+    const locations = await googleBusinessService.getAccessibleLocations(accountId);
+    return reply.send({ success: true, data: locations });
+  } catch (err: any) {
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+};
+
+export const getMappingsHandler = async (request: FastifyRequest, reply: FastifyReply) => {
+  try {
+    const mappings = await reputationService.getMappings();
+    return reply.send({ success: true, data: mappings });
+  } catch (err: any) {
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+};
+
+export const saveMappingsHandler = async (
+  request: FastifyRequest<{ Body: { mappings: { clinicId: string; googleLocationId: string | null }[] } }>,
+  reply: FastifyReply
+) => {
+  try {
+    const { mappings } = request.body;
+    await reputationService.saveMappings(mappings);
+    return reply.send({ success: true, message: 'Mappings saved successfully' });
+  } catch (err: any) {
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+};
+
+export const replyToReviewHandler = async (
+  request: FastifyRequest<{ Params: { id: string }; Body: { reply: string } }>,
+  reply: FastifyReply
+) => {
+  try {
+    const { id } = request.params;
+    const { reply: replyText } = request.body;
+    if (!replyText) {
+      return reply.status(400).send({ success: false, error: 'Missing reply message text body parameter' });
+    }
+    const result = await googleBusinessService.replyToReview(id, replyText);
+    return reply.send({ success: true, data: result });
+  } catch (err: any) {
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+};
+
+export const syncGbpReviewsHandler = async (request: FastifyRequest, reply: FastifyReply) => {
+  try {
+    const result = await googleBusinessService.syncReviews();
+    return reply.send({ success: true, data: result });
+  } catch (err: any) {
+    return reply.status(500).send({ success: false, error: err.message });
+  }
 };

@@ -4,17 +4,19 @@ import { integrationsService } from '../services/integrations.service';
 import { ga4Service } from '../services/ga4.service';
 
 // Store state tokens in memory (in production, use Redis or DB with expiration)
-// Maps state -> { userId, timestamp }
-const stateStore = new Map<string, { userId: string; timestamp: number }>();
+// Maps state -> { userId, timestamp, subview }
+const stateStore = new Map<string, { userId: string; timestamp: number; subview?: string }>();
 
 export default async function googleOAuthRoutes(fastify: FastifyInstance) {
   fastify.get('/google/oauth/start', async (request: FastifyRequest, reply: FastifyReply) => {
     // We assume the user is authenticated, but for this demo route we'll just use a mock user ID if none exists.
     // In a real scenario, you'd extract userId from the JWT token.
     const userId = (request as any).user?.id || 'system-user';
+    const query = request.query as { subview?: string };
+    const subview = query.subview || 'ga4';
     
     const state = googleOAuthService.generateStateToken();
-    stateStore.set(state, { userId, timestamp: Date.now() });
+    stateStore.set(state, { userId, timestamp: Date.now(), subview });
     
     const authUrl = googleOAuthService.getAuthUrl(state);
     
@@ -54,6 +56,7 @@ export default async function googleOAuthRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ error: 'State token expired' });
     }
     
+    const subview = stateData.subview || 'ga4';
     stateStore.delete(query.state); // Single use
     console.log(`[OAUTH CALLBACK] State token validated successfully.`);
 
@@ -63,12 +66,14 @@ export default async function googleOAuthRoutes(fastify: FastifyInstance) {
       console.log(`[OAUTH CALLBACK] Token exchange successful. Refresh token present:`, !!tokens.refresh_token);
       
       if (tokens.access_token) {
-        console.log(`[OAUTH CALLBACK] Saving credentials for platforms "ga4" and "gsc"...`);
+        console.log(`[OAUTH CALLBACK] Saving credentials for platforms "ga4", "gsc", "google-ads" and "google-business"...`);
         await integrationsService.saveCredentials('ga4', tokens.access_token, tokens.refresh_token || null, undefined);
         await integrationsService.saveCredentials('gsc', tokens.access_token, tokens.refresh_token || null, undefined);
+        await integrationsService.saveCredentials('google-ads', tokens.access_token, tokens.refresh_token || null, undefined);
+        await integrationsService.saveCredentials('google-business', tokens.access_token, tokens.refresh_token || null, undefined);
         console.log(`[OAUTH CALLBACK] Credentials saved successfully.`);
         
-        return reply.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/integrations?subview=ga4&connected=true`);
+        return reply.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/integrations?subview=${subview}&connected=true`);
       } else {
         console.error(`[OAUTH CALLBACK] No access token returned from Google`);
         return reply.status(400).send({ error: 'No access token returned from Google' });

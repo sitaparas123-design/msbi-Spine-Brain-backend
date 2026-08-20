@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { wordpressFormHandler } from '../controllers/webhooks.controller';
+import { wordpressFormHandler, googleReviewsWebhookHandler } from '../controllers/webhooks.controller';
 import { wordpressFormWebhookSchema } from '../validators/webhooks.schema';
 
 export async function webhooksRoutes(fastify: FastifyInstance) {
@@ -20,5 +20,10 @@ export async function webhooksRoutes(fastify: FastifyInstance) {
       }
     },
     wordpressFormHandler
+  );
+
+  server.post(
+    '/google-reviews',
+    googleReviewsWebhookHandler
   );
 }

@@ -112,6 +112,25 @@ export class ReputationService {
       }
     });
   }
+
+  async getMappings() {
+    return prisma.clinic.findMany({
+      select: {
+        id: true,
+        name: true,
+        googleLocationId: true
+      }
+    });
+  }
+
+  async saveMappings(mappings: { clinicId: string; googleLocationId: string | null }[]) {
+    for (const mapping of mappings) {
+      await prisma.clinic.update({
+        where: { id: mapping.clinicId },
+        data: { googleLocationId: mapping.googleLocationId }
+      });
+    }
+  }
 }
 
 export const reputationService = new ReputationService();

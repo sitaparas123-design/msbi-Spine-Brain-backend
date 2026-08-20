@@ -217,3 +217,25 @@ export const syncMailchimpHandler = async (request: FastifyRequest, reply: Fasti
     return reply.status(500).send({ success: false, error: err.message });
   }
 };
+
+export const getGoogleAdsConfigHandler = async (request: FastifyRequest, reply: FastifyReply) => {
+  try {
+    const config = await googleAdsService.getConfig();
+    return reply.send({ success: true, data: config });
+  } catch (err: any) {
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+};
+
+export const setGoogleAdsConfigHandler = async (
+  request: FastifyRequest<{ Body: { customerId: string; loginCustomerId?: string | null } }>,
+  reply: FastifyReply
+) => {
+  try {
+    const { customerId, loginCustomerId } = request.body;
+    await googleAdsService.setConfig(customerId, loginCustomerId);
+    return reply.send({ success: true, message: 'Google Ads configuration saved successfully' });
+  } catch (err: any) {
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+};

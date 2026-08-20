@@ -2,6 +2,7 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import crypto from 'crypto';
 import prisma from '../plugins/db';
 import { WordpressFormWebhookInput, wordpressFormWebhookSchema } from '../validators/webhooks.schema';
+import { googleBusinessService } from '../services/google-business.service';
 
 export const wordpressFormHandler = async (
   request: FastifyRequest<{ Body: WordpressFormWebhookInput }>,
@@ -127,4 +128,41 @@ export const wordpressFormHandler = async (
   });
 
   return reply.send({ success: true, data: submission });
+};
+
+export const googleReviewsWebhookHandler = async (
+  request: FastifyRequest,
+  reply: FastifyReply
+) => {
+  const secret = process.env.GOOGLE_REVIEWS_WEBHOOK_SECRET || 'gcp-pubsub-secret-key-2026';
+  const incomingSecret = request.headers['x-webhook-secret'] || (request.query as any).secret;
+
+  if (!incomingSecret || incomingSecret !== secret) {
+    return reply.status(403).send({ success: false, error: 'Forbidden: Invalid webhook secret' });
+  }
+
+  const body = request.body as any;
+  if (!body || !body.message || !body.message.data) {
+    return reply.status(400).send({ success: false, error: 'Bad Request: Invalid Pub/Sub message structure' });
+  }
+
+  try {
+    const decodedDataString = Buffer.from(body.message.data, 'base64').toString('utf-8');
+    const parsedData = JSON.parse(decodedDataString);
+
+    console.log('[GOOGLE REVIEWS WEBHOOK] Decoded payload:', parsedData);
+
+    if (parsedData.alertType === 'NEW_REVIEW' && parsedData.userReview?.reviewName) {
+      const reviewName = parsedData.userReview.reviewName;
+      console.log(`[GOOGLE REVIEWS WEBHOOK] Fetching details for review: ${reviewName}`);
+      
+      const newReview = await googleBusinessService.fetchAndSaveSingleReview(reviewName);
+      return reply.send({ success: true, message: 'Review synced and processed successfully', data: newReview });
+    }
+
+    return reply.send({ success: true, message: 'Non-review alert type or missing review name ignored.' });
+  } catch (err: any) {
+    console.error('[GOOGLE REVIEWS WEBHOOK] Failed to process webhook message:', err.message || err);
+    return reply.status(500).send({ success: false, error: err.message || 'Internal server error' });
+  }
 };

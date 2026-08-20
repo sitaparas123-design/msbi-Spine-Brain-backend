@@ -2,6 +2,7 @@ import prisma from '../plugins/db';
 import { SyncIntegrationInput } from '../validators/integrations.schema';
 import { encryptCredential, decryptCredential } from '../utils/crypto';
 import { wordpressService } from './wordpress.service';
+import { googleAdsService } from './google-ads.service';
 
 // The expected baseline of providers the frontend can connect to
 const KNOWN_PROVIDERS = [
@@ -41,6 +42,13 @@ export class IntegrationsService {
       const dbRecord = dbMap.get(provider);
       
       let isConnected = !!(dbRecord && dbRecord.isActive && (dbRecord.accessToken || dbRecord.apiKey));
+      
+      if (provider === 'google-ads') {
+        const hasCredentials = !!(dbRecord && dbRecord.isActive && dbRecord.accessToken);
+        const hasCustomerId = !!(process.env.GOOGLE_ADS_CUSTOMER_ID || (dbRecord?.config as any)?.customerId);
+        isConnected = hasCredentials && hasCustomerId;
+      }
+
       let status = 'not_connected';
 
       if (provider === 'wordpress') {
@@ -174,6 +182,25 @@ export class IntegrationsService {
   }
 
   async triggerSync(data: SyncIntegrationInput) {
+    if (data.platformName === 'GOOGLE_ADS') {
+      try {
+        const campaigns = await googleAdsService.listCampaigns();
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - 30);
+        const endDate = new Date();
+        
+        const metrics = await googleAdsService.getCampaignMetricsByDateRange(
+          startDate.toISOString().split('T')[0],
+          endDate.toISOString().split('T')[0]
+        );
+        
+        const { campaignsService } = require('./campaigns.service');
+        await campaignsService.upsertExternalCampaigns(campaigns, metrics);
+      } catch (err: any) {
+        console.error('Manual sync failed for Google Ads:', err.message);
+        throw err;
+      }
+    }
     // In a real app, this would queue a job to fetch data from the external API
     return {
       message: `Manual sync triggered for ${data.platformName}.`,
