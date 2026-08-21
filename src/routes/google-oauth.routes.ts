@@ -5,18 +5,19 @@ import { ga4Service } from '../services/ga4.service';
 
 // Store state tokens in memory (in production, use Redis or DB with expiration)
 // Maps state -> { userId, timestamp, subview }
-const stateStore = new Map<string, { userId: string; timestamp: number; subview?: string }>();
+const stateStore = new Map<string, { userId: string; timestamp: number; subview?: string; redirectOrigin?: string }>();
 
 export default async function googleOAuthRoutes(fastify: FastifyInstance) {
   fastify.get('/google/oauth/start', async (request: FastifyRequest, reply: FastifyReply) => {
     // We assume the user is authenticated, but for this demo route we'll just use a mock user ID if none exists.
     // In a real scenario, you'd extract userId from the JWT token.
     const userId = (request as any).user?.id || 'system-user';
-    const query = request.query as { subview?: string };
+    const query = request.query as { subview?: string; redirect_origin?: string };
     const subview = query.subview || 'ga4';
+    const redirectOrigin = query.redirect_origin || process.env.FRONTEND_URL || 'http://localhost:3000';
     
     const state = googleOAuthService.generateStateToken();
-    stateStore.set(state, { userId, timestamp: Date.now(), subview });
+    stateStore.set(state, { userId, timestamp: Date.now(), subview, redirectOrigin });
     
     const authUrl = googleOAuthService.getAuthUrl(state);
     
@@ -31,9 +32,13 @@ export default async function googleOAuthRoutes(fastify: FastifyInstance) {
       error: query.error
     });
 
+    const stateData = query.state ? stateStore.get(query.state) : null;
+    const redirectOrigin = stateData?.redirectOrigin || process.env.FRONTEND_URL || 'http://localhost:3000';
+
     if (query.error) {
       console.error(`[OAUTH CALLBACK] Google returned error: ${query.error}`);
-      return reply.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/integrations?error=oauth_denied`);
+      if (query.state) stateStore.delete(query.state);
+      return reply.redirect(`${redirectOrigin}/integrations?error=oauth_denied`);
     }
 
     if (!query.code || !query.state) {
@@ -43,7 +48,6 @@ export default async function googleOAuthRoutes(fastify: FastifyInstance) {
 
     // Validate state
     console.log(`[OAUTH CALLBACK] Validating state token: ${query.state}`);
-    const stateData = stateStore.get(query.state);
     if (!stateData) {
       console.error(`[OAUTH CALLBACK] Invalid or expired state token`);
       return reply.status(400).send({ error: 'Invalid or expired state token' });
@@ -73,14 +77,14 @@ export default async function googleOAuthRoutes(fastify: FastifyInstance) {
         await integrationsService.saveCredentials('google-business', tokens.access_token, tokens.refresh_token || null, undefined);
         console.log(`[OAUTH CALLBACK] Credentials saved successfully.`);
         
-        return reply.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/integrations?subview=${subview}&connected=true`);
+        return reply.redirect(`${redirectOrigin}/integrations?subview=${subview}&connected=true`);
       } else {
         console.error(`[OAUTH CALLBACK] No access token returned from Google`);
         return reply.status(400).send({ error: 'No access token returned from Google' });
       }
     } catch (err: any) {
       console.error(`[OAUTH CALLBACK] Token exchange failed: ${err.message}`);
-      return reply.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/integrations?error=token_exchange_failed`);
+      return reply.redirect(`${redirectOrigin}/integrations?error=token_exchange_failed`);
     }
   });
 

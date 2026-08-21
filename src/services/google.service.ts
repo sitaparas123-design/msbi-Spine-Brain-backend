@@ -21,7 +21,7 @@ export class GoogleOAuthService {
     const oauth2Client = this.getClient();
     return oauth2Client.generateAuthUrl({
       access_type: 'offline',
-      prompt: 'consent',
+      prompt: 'consent select_account',
       scope: SCOPES,
       state, // Secure random state passed in from the router
     });
