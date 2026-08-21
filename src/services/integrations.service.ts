@@ -139,8 +139,28 @@ export class IntegrationsService {
       actualConfig = config;
     }
 
+    // Retrieve existing credentials to preserve the refresh token and merge configs
+    let finalRefreshToken = refreshToken;
+    let finalConfig = actualConfig;
+    
+    const existing = await prisma.integrationCredential.findUnique({
+      where: { platformName },
+      select: { refreshToken: true, config: true }
+    });
+    
+    if (!finalRefreshToken && existing?.refreshToken) {
+      finalRefreshToken = decryptCredential(existing.refreshToken);
+    }
+    
+    if (existing?.config) {
+      finalConfig = {
+        ...(existing.config as any),
+        ...actualConfig
+      };
+    }
+
     const encryptedAccess = encryptCredential(accessToken);
-    const encryptedRefresh = encryptCredential(refreshToken);
+    const encryptedRefresh = encryptCredential(finalRefreshToken);
     const encryptedApi = encryptCredential(apiKey);
     
     return prisma.integrationCredential.upsert({
@@ -149,7 +169,7 @@ export class IntegrationsService {
         accessToken: encryptedAccess,
         refreshToken: encryptedRefresh,
         apiKey: encryptedApi,
-        config: actualConfig !== null ? actualConfig : undefined,
+        config: finalConfig !== null ? finalConfig : undefined,
         isActive: true
       },
       create: {
@@ -157,7 +177,7 @@ export class IntegrationsService {
         accessToken: encryptedAccess,
         refreshToken: encryptedRefresh,
         apiKey: encryptedApi,
-        config: actualConfig !== null ? actualConfig : undefined,
+        config: finalConfig !== null ? finalConfig : undefined,
         isActive: true
       }
     });

@@ -22,13 +22,15 @@ export class GoogleAdsService {
     }
 
     try {
-      const { client, onTokens } = await googleOAuthService.getAuthenticatedClient(creds.accessToken, creds.refreshToken);
+      const config = creds.config as any;
+      const { client, onTokens } = await googleOAuthService.getAuthenticatedClient(creds.accessToken, creds.refreshToken, config?.expiryDate);
 
       onTokens(async (tokens) => {
         if (tokens.access_token) {
           console.log('[GOOGLE ADS SERVICE] Tokens updated/refreshed automatically. Saving new credentials...');
           const newRefreshToken = tokens.refresh_token || creds.refreshToken;
-          await integrationsService.saveCredentials('google-ads', tokens.access_token, newRefreshToken, creds.config);
+          const newConfig = { ...config, expiryDate: tokens.expiry_date };
+          await integrationsService.saveCredentials('google-ads', tokens.access_token, newRefreshToken, newConfig);
           console.log('[GOOGLE ADS SERVICE] Refreshed credentials saved.');
         }
       });

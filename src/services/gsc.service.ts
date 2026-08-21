@@ -8,12 +8,14 @@ export class GSCService {
     if (!creds?.accessToken) {
       throw new Error('GSC not connected');
     }
-    const { client, onTokens } = await googleOAuthService.getAuthenticatedClient(creds.accessToken, creds.refreshToken);
+    const config = creds.config as any;
+    const { client, onTokens } = await googleOAuthService.getAuthenticatedClient(creds.accessToken, creds.refreshToken, config?.expiryDate);
     
     onTokens(async (tokens) => {
       if (tokens.access_token) {
         const newRefreshToken = tokens.refresh_token || creds.refreshToken;
-        await integrationsService.saveCredentials('gsc', tokens.access_token, newRefreshToken, creds.config);
+        const newConfig = { ...config, expiryDate: tokens.expiry_date };
+        await integrationsService.saveCredentials('gsc', tokens.access_token, newRefreshToken, newConfig);
       }
     });
 

@@ -37,12 +37,13 @@ export class GoogleOAuthService {
    * Retrieves an authenticated client based on decrypted DB credentials.
    * Also returns whether the token was refreshed, so the caller can save the new token if needed.
    */
-  async getAuthenticatedClient(accessToken: string, refreshToken?: string | null) {
+  async getAuthenticatedClient(accessToken: string, refreshToken?: string | null, expiryDate?: number | null) {
     const oauth2Client = this.getClient();
     
     oauth2Client.setCredentials({
       access_token: accessToken,
       refresh_token: refreshToken || undefined,
+      expiry_date: expiryDate || undefined
     });
 
     let wasRefreshed = false;

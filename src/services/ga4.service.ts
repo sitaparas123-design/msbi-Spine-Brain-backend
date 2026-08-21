@@ -42,13 +42,15 @@ export class GA4Service {
     
     try {
       console.log('[GA4 SERVICE] Retrieving authenticated OAuth2Client...');
-      const { client, onTokens } = await googleOAuthService.getAuthenticatedClient(creds.accessToken, creds.refreshToken);
+      const config = creds.config as any;
+      const { client, onTokens } = await googleOAuthService.getAuthenticatedClient(creds.accessToken, creds.refreshToken, config?.expiryDate);
       
       onTokens(async (tokens) => {
         if (tokens.access_token) {
           console.log('[GA4 SERVICE] Tokens updated/refreshed automatically. Saving new credentials...');
           const newRefreshToken = tokens.refresh_token || creds.refreshToken;
-          await integrationsService.saveCredentials('ga4', tokens.access_token, newRefreshToken, creds.config);
+          const newConfig = { ...config, expiryDate: tokens.expiry_date };
+          await integrationsService.saveCredentials('ga4', tokens.access_token, newRefreshToken, newConfig);
           console.log('[GA4 SERVICE] Refreshed credentials saved.');
         }
       });
@@ -120,6 +122,45 @@ export class GA4Service {
       });
       return response;
     } catch (error: any) {
+      const isUnauthenticated = error.code === 16 || 
+        error.message?.includes('UNAUTHENTICATED') || 
+        error.message?.includes('invalid authentication credentials') ||
+        error.message?.includes('invalid_grant');
+        
+      if (isUnauthenticated) {
+        console.log('[GA4 SERVICE] Request failed with unauthenticated error. Attempting manual token refresh...');
+        try {
+          const oauth2Client = await this.getClient();
+          if (oauth2Client.credentials.refresh_token) {
+            console.log('[GA4 SERVICE] Refresh token found. Refreshing access token...');
+            const refreshRes = await oauth2Client.refreshAccessToken();
+            const newAccessToken = refreshRes.credentials.access_token;
+            if (newAccessToken) {
+              console.log('[GA4 SERVICE] Token refresh successful. Saving new credentials...');
+              const creds = await integrationsService.getSecureCredentials('ga4');
+              const newRefreshToken = refreshRes.credentials.refresh_token || creds?.refreshToken;
+              const newConfig = { ...(creds?.config as any), expiryDate: refreshRes.credentials.expiry_date };
+              await integrationsService.saveCredentials('ga4', newAccessToken, newRefreshToken || null, newConfig);
+              
+              // Retry the report with the new client
+              console.log('[GA4 SERVICE] Retrying runReport with refreshed credentials...');
+              const newAnalyticsDataClient = await this.getAnalyticsDataClient();
+              const [response] = await newAnalyticsDataClient.runReport({
+                property: `properties/${cleanPropertyId}`,
+                dateRanges: [{ startDate, endDate }],
+                dimensions: dimensions.map(d => ({ name: d })),
+                metrics: metrics.map(m => ({ name: m }))
+              });
+              return response;
+            }
+          } else {
+            console.warn('[GA4 SERVICE] No refresh token available. Cannot perform manual refresh.');
+          }
+        } catch (refreshErr: any) {
+          console.error('[GA4 SERVICE] Manual token refresh or retry failed:', refreshErr);
+        }
+      }
+      
       console.error('[GA4 runReport Error Details]:', error);
       const msg = error.message || '';
       // Map only token/key expiration issues to authorization prompts, letting real API errors pass through
