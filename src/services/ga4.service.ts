@@ -20,12 +20,15 @@ export class GA4Service {
   }
 
   private async getPropertyId() {
+    const creds = await integrationsService.getSecureCredentials('ga4');
+    const config = creds?.config as any;
+    if (config?.propertyId) {
+      return config.propertyId;
+    }
     if (process.env.GOOGLE_GA4_PROPERTY_ID) {
       return process.env.GOOGLE_GA4_PROPERTY_ID;
     }
-    const creds = await integrationsService.getSecureCredentials('ga4');
-    const config = creds?.config as any;
-    return config?.propertyId || null;
+    return null;
   }
 
   private async getClient() {
@@ -105,29 +108,28 @@ export class GA4Service {
     if (!propertyId) {
       throw new Error('GOOGLE_GA4_PROPERTY_ID is not configured in .env and not found in database');
     }
+    const cleanPropertyId = propertyId.replace(/^properties\//, '');
     
     try {
       const analyticsDataClient = await this.getAnalyticsDataClient();
       const [response] = await analyticsDataClient.runReport({
-        property: `properties/${propertyId}`,
+        property: `properties/${cleanPropertyId}`,
         dateRanges: [{ startDate, endDate }],
         dimensions: dimensions.map(d => ({ name: d })),
         metrics: metrics.map(m => ({ name: m }))
       });
       return response;
     } catch (error: any) {
-      console.error('GA4 runReport OAuth error:', error.message || error);
+      console.error('[GA4 runReport Error Details]:', error);
       const msg = error.message || '';
-      // Map cryptic token/key/auth errors to a clean, user-friendly message
+      // Map only token/key expiration issues to authorization prompts, letting real API errors pass through
       if (
         msg.includes('invalid_grant') ||
         msg.includes('Getting credentials failed') ||
         msg.includes('Getting metadata from plugin failed') ||
-        msg.includes('auth') ||
-        msg.includes('permission') ||
         msg.includes('key must be')
       ) {
-        throw new Error('Google Analytics authorization required');
+        throw new Error('Google Analytics authorization required: token is invalid or expired.');
       }
       throw error;
     }

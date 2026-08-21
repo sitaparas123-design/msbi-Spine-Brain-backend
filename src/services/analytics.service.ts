@@ -74,8 +74,9 @@ export class AnalyticsService {
           activeUsers: parseInt(String(ga4Data?.activeUsers || 0), 10),
           websiteConversionRate: null // Needs exact definition
         };
-      } catch (e) {
-        website.error = 'Failed to fetch GA4 data';
+      } catch (e: any) {
+        console.error('[ANALYTICS SERVICE GA4 OVERVIEW ERROR]:', e);
+        website.error = `Failed to fetch GA4 data: ${e.message || e}`;
       }
     }
 
@@ -339,11 +340,11 @@ export class AnalyticsService {
           searchConsole: [] // Leave empty or return GSC data if available
         }
       };
-    } catch (error) {
-      console.error('Failed to fetch website analytics:', error);
+    } catch (error: any) {
+      console.error('[ANALYTICS SERVICE WEBSITE ANALYTICS ERROR]:', error);
       return {
         connected: true,
-        error: 'Failed to fetch GA4 data',
+        error: `Failed to fetch GA4 data: ${error.message || error}`,
         data: {
           overview: { sessions: 0, screenPageViews: 0, activeUsers: 0, engagedSessions: 0 },
           landingPages: [],
